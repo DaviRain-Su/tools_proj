@@ -1,55 +1,142 @@
 #pragma once
 
 #include <iostream>
+#include <memory>
 
-#include "uio.h"
 
-class Ps_process
+#include "Reg.h"
+#include "utils.h"
+#include "info_struct.h"
+
+
+using std::shared_ptr;
+
+namespace  snowlake { // start namespace snowlake 
+
+
+//------------------------------------------------------------------------
+class PS_process
 {
-    //初始化信息
-    struct Init_info_t {
-        uint64_t base_address;//基地址
-        char interrupt_path[12];//中断文件路径
-
-        Init_info_t() {}
-        ~Init_info_t() {}
-    };
-    // input offset info
-    struct Input_info_t {
-        uint64_t input_address;// 读入地址  
-        
-        Input_info_t() {}
-        ~Input_info_t() {}
-    };
-    struct Output_info_t {
-        uint64_t output_address;//输出地址
-        uint64_t output_data_size;//data size
-        
-        Output_info_t() {}
-        ~Output_info_t() {}
-    };
-    struct Reg_index_t {
-        uint64_t index_value;// index
-        
-        Reg_index_t() {}
-        ~Reg_index_t() {}
-    };
 
 public:
-    Ps_process() {}
-    ~Ps_process() {}
-    
-    void *get_calc_data(void);
-    int get_calc_len(void);
-    int ps_idle_check(void);
-    int ps_status(void);
+    PS_process();
+    ~PS_process();
+
+    void *get_calc_data();
+    int get_calc_len();
+    int ps_idle_check();
     int get_reg_value(int index);
-    int ps_copy_input_data(Init_info_t &paddr_size_info, void * pdata, unsigned int len, uint64_t data_address_offset);
+    int ps_calc_ok();
+    int ps_status();
+    int ps_copy_input_data(Input_info_t &paddr_size_info, void * pdata, unsigned int len, uint64_t data_address_offset);
     int ps_copy_para(void *pdata, unsigned int len);
+
 private:
-    Init_info_t init_info;
-    Input_info_t input_info;
-    Output_info_t output_info;
-    Reg_index_t reg_index;
+    shared_ptr<Reg> ptr_reg;
 };
 
+PS_process::PS_process()
+    : ptr_reg (new Reg)
+{
+    std::cout << "PS_process()" << std::endl;
+}
+
+PS_process::~PS_process() {
+    std::cout << "~PS_process()" << std::endl;
+}
+
+void* PS_process::get_calc_data(){
+    static unsigned char buff[1024 * 1024] = {2, 3, 4, 5, 6, 7, 8, 9 , 10};
+    return buff;
+}
+
+int PS_process::get_calc_len(){
+    return 512 * 512 * 3;
+}
+int PS_process::ps_idle_check() {
+    return true;
+}
+
+int PS_process::get_reg_value(int index){
+    int32_t real_value = 0; 
+
+    int length = ptr_reg->get_regs_len();
+    if( 0 < length ){
+        if (length - 1 < index ){
+            printf("index more than regs length\n");
+            return -1;
+        }
+        real_value = ptr_reg->get_regs_index_value(index);
+    }else{
+        printf("reg length is empty!\n");
+    }
+    return real_value;
+}
+
+int PS_process::ps_calc_ok(){
+    int length = ptr_reg->get_regs_len();
+    printf("ps_calc_ok length = %d\n", length);
+
+    if(0 < length ){
+        unsigned int *regs = nullptr;
+        regs = (unsigned int*)malloc( sizeof(unsigned int) * length );
+
+        int len = ptr_reg->get_regs(regs, length);
+        if(0 == len ){
+            printf("parse regs fail\n");
+            free(regs);
+            return -1;
+        }
+        free(regs);
+    }
+    return 0;
+}
+
+int PS_process::ps_status(){
+    int length = ptr_reg->get_regs_len();
+
+    if(0 < length){ 
+        unsigned int *regs = nullptr;
+        regs = (unsigned int*)malloc(sizeof(unsigned int) * length);
+
+        int len = ptr_reg->get_regs(regs, length);
+        if(0 == len){
+            printf("ps_status parse regs fail\n");
+            free(regs);
+            return Frame_head::ERR_STATUS::ERR_PARAM;
+        }
+
+        if(1 == regs[0]){
+            printf("regs[0] == 0x%x, AXI works well \n", regs[0]);
+            free(regs);
+            return Frame_head::ERR_STATUS::ERR_AXI_SUC;
+        }else{
+            printf("AXI works failed, regs[0] = 0x%x\n", regs[0]);
+            free(regs);
+            return Frame_head::ERR_STATUS::ERR_PARAM;
+        }
+    }else{
+        return Frame_head::ERR_STATUS::ERR_PARAM;
+    }
+}
+
+int PS_process::ps_copy_input_data(Input_info_t &paddr_size_info, void *pdata, unsigned int len, uint64_t data_address_offset)
+{
+    uint64_t offset = data_address_offset;
+    void *memBaseCopyAddr = ptr_reg->get_memBasseAddr() + offset;
+
+    DBG_INFO("[T]ps_copy_inputdata || data_address_offset : 0x%llx, memBaseAddr: 0x%llx, memBaseCopyAddr: 0x%llx, len: 0x%llx\n", offset, ptr_reg->get_memBasseAddr(), memBaseCopyAddr, len);
+    memcpy(memBaseCopyAddr, pdata, len);
+
+    return 0;
+
+}
+
+int PS_process::ps_copy_para(void *pdata, unsigned int len){
+    uint64_t offset = 0x0;
+    printf("[T]ps_copy_para %d, memBaseAddr = %x\n", len, ptr_reg->get_memBasseAddr());
+    memcpy(ptr_reg->get_memBasseAddr() + offset,pdata, len);
+    return 0;
+}
+
+};

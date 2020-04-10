@@ -10,30 +10,27 @@
 
 #include "Frame_head.h"
 #include "utils.h"
+#include "ps_process.h"
+#include "uio.h"
 
 using std::list;
 using std::cout;
 using std::endl;
 using std::shared_ptr;
 
-class Input_info;
+namespace  snowlake { // start namespace snowlake
 
 class Protocol
 {
-    struct Clinet_info
-    {
-        //std::list<_> m_list; 
-        int fd;//socket file discription
-        unsigned char rxbuf_ptr[FRAME_MAX_LEN]; // 接收缓冲区长度
-        int rxlen;// 当前接收数据长度
-        time_t rxtime; // 上次接收包时刻
-        int fsmstate;//状态
-    };
 
     struct Work_info {
-        Input_info input_info;// 图像信息
+        Input_info_t input_info;// 图像信息
+        
         uint64_t ann_busy; 
-
+        
+        void set_init_info( Input_info_t &lhs){
+            input_info = lhs;
+        }
         //ctr
         Work_info() {
             std::cout << "Work_info()" << std::endl;
@@ -44,10 +41,14 @@ class Protocol
     };
 
 public:
-    Protocol() {}
-    ~Protocol() {}
+    Protocol();
+    ~Protocol();
 
-    int input_data_check(Input_info &p_addr_size_info);
+    //这里有问题
+    int input_data_check(Input_info_t &lhs);
+    int init_data_check(Init_info_t &lhs);
+    int output_data_check(Output_info_t &lhs);
+
     int simple_cmd_reply(int socket,  uint16_t seq, unsigned char cmd, int8_t rtcode);
     int simple_cmd_reply_data(int socket, uint16_t seq, unsigned char cmd, int8_t rtcode, void* databuf, unsigned int datalen);
     int cmd_begin_reply(int socket, unsigned char* cmdbuf, unsigned int len);
@@ -62,19 +63,38 @@ public:
     int feed_dog();
 
 private:
-    Frame_head m_frame_head;
-    Work_info work_info;
     static uint32_t OUT_PUT_ADDRESS; // 当前输入参数大小
     static uint32_t DATA_READ_ADDRESS_OFFSET; // 当前输出数据大小
+    
+    Frame_head m_frame_head;
+    Work_info work_info;
+    shared_ptr<Reg> ptr_reg;
+    shared_ptr<PS_process> ptr_ps;
 };
 
 uint32_t Protocol::OUT_PUT_ADDRESS = 0;
 uint32_t Protocol::DATA_READ_ADDRESS_OFFSET = 0;
 
+Protocol::Protocol()
+   // : ptr_reg(new Reg)
+    : ptr_ps(new PS_process)
+    {
+        cout << "Protocol()"<<  endl;
+    }
+
+Protocol::~Protocol() {
+    cout << "~Protocol()" << endl;
+}
 
 int
-Protocol::input_data_check(Input_info &p_addr_size_info){
+Protocol::input_data_check(Input_info_t &p_addr_size_info){
     return 1; 
+}
+int Protocol::init_data_check(Init_info_t& lhs){
+    return 1;
+}
+int Protocol::output_data_check(Output_info_t &lhs){
+    return 1;
 }
 
 int Protocol::simple_cmd_reply(int socket, uint16_t seq, unsigned char cmd, int8_t rtcode){
@@ -142,11 +162,11 @@ int simple_cmd_reply_data(int socket, uint16_t seq, unsigned char cmd, int8_t rt
 int
 Protocol::cmd_begin_reply(int socket, unsigned char * cmdbuf, unsigned int len){
     //----- 
-    Input_info init_info;
+    Init_info_t init_info;
     F_Head *phead = (F_Head*)cmdbuf;
-    memcpy(&init_info, cmdbuf + FRAME_HEAD_LEN + 1, sizeof(Input_info));
+    memcpy(&init_info, cmdbuf + FRAME_HEAD_LEN + 1, sizeof(Input_info_t));
 
-    if( !input_data_check(init_info))// not vaild
+    if( !init_data_check(init_info))
     {
         return simple_cmd_reply(socket, phead->get_seq(), Frame_head::CMD_BEGIN, Frame_head::ERR_STATUS::ERR_PARAM);
     }else{
@@ -155,7 +175,8 @@ Protocol::cmd_begin_reply(int socket, unsigned char * cmdbuf, unsigned int len){
         // -----
         char* interrupt_path = init_info.interrupt_path;
         // -----
-        fpga_init(base_address, interrupt_path);
+        //ptr_reg->fpga_init(base_address, interrupt_path);
+        ptr_reg = std::make_shared<Reg>(new Reg);
 
         return simple_cmd_reply(socket, phead->get_seq(), Frame_head::CMD::CMD_BEGIN, Frame_head::ERR_STATUS::ERR_NONE);
     }
@@ -164,22 +185,23 @@ Protocol::cmd_begin_reply(int socket, unsigned char * cmdbuf, unsigned int len){
 // need
 int Protocol::cmd_tx_data_reply(int socket, unsigned char* cmdbuf, unsigned int len){
     // -----
-    Input_info input_info;
+    Input_info_t input_info;
     F_Head * phead = (F_Head*)cmdbuf;
-    memcpy(&input_info, cmdbuf + FRAME_HEAD_LEN + 1, sizeof(Input_info));
+    memcpy(&input_info, cmdbuf + FRAME_HEAD_LEN + 1, sizeof(Input_info_t));
     // input_data_check() ----
-    if(input_data_check(&input_info)){
+    if(input_data_check(input_info)){ // input_data_check 有问题
         // -----
         DATA_READ_ADDRESS_OFFSET  = input_info.input_address;
         // ------
-        work_info.input_info = input_info;
+        //work_info.input_info = input_info;
+        work_info.set_init_info(input_info);
         DBG_INFO("DATA_READ_ADDRESS_OFFSET : 0x%llx\n", DATA_READ_ADDRESS_OFFSET);
     }else{
         DBG_INFO("receiver image error! \n");
         return simple_cmd_reply(socket, phead->get_seq(), Frame_head::CMD_TX_DATA, Frame_head::ERR_STATUS::ERR_PARAM);
     }
     // ----
-    ps_copy_inputdata(&(work_info.input_info), cmdbuf + FRAME_HEAD_LEN + 1 + sizeof(Input_info), phead->get_len() - FRAME_HEAD_LEN - sizeof(input_info) - CMD_STATUS_LEN - CHECK_SUM_LEN - CHECK_SUM_LEN - END_DATA_LEN, DATA_READ_ADDRESS_OFFSET);
+    ptr_ps->ps_copy_input_data(work_info.input_info, cmdbuf + FRAME_HEAD_LEN + 1 + sizeof(Input_info_t), phead->get_len() - FRAME_HEAD_LEN - sizeof(input_info) - CMD_STATUS_LEN - CHECK_SUM_LEN - CHECK_SUM_LEN - END_DATA_LEN, DATA_READ_ADDRESS_OFFSET);
 
     return simple_cmd_reply(socket, phead->get_len(), Frame_head::CMD::CMD_TX_DATA, Frame_head::ERR_STATUS::ERR_NONE);
 }
@@ -190,10 +212,10 @@ int Protocol::cmd_calc_reply(int socket, unsigned char *cmdbuf, unsigned int len
     F_Head * phead = (F_Head*)cmdbuf;
     int reg_index = -1;
     // ----
-    if(ps_idle_check()) {
+    if(ptr_ps->ps_idle_check()) {
         DBG_INFO("cmd_test_red\n");
         // ------
-        reg_index = cmd_test_reg();
+        reg_index = ptr_reg->cmd_test_reg();
         return simple_cmd_reply(socket, phead->get_seq(), Frame_head::CMD::CMD_START_CAL, reg_index);
     }else{
         return simple_cmd_reply(socket, phead->get_seq(), Frame_head::CMD::CMD_START_CAL, Frame_head::ERR_STATUS::ERR_BUSY);
@@ -217,14 +239,14 @@ int Protocol::cmd_config_reply(int socket, unsigned char *cmdbuf, unsigned int l
 
 int Protocol::cmd_get_data_reply(int socket, unsigned char* cmdbuf, unsigned int len){
 
-    Output_info out_info;
+    Output_info_t out_info;
     F_Head *phead = (F_Head*)cmdbuf;
     // -----
     memcpy(&out_info, cmdbuf + FRAME_HEAD_LEN + 1, sizeof(out_info));
 
     uint32_t out_put_address_offset = 0;
     uint32_t out_put_size = 0;
-    if(input_data_check(&out_info)){
+    if(output_data_check(out_info)){
         out_put_address_offset = out_info.output_address;
         out_put_size = out_info.output_data_size;
         DBG_INFO("OUT_PUT_ADDRESS : 0x%llx, OUTPUT_PARA_SIZE: 0x%llx\n", out_put_address_offset, out_put_size);
@@ -234,7 +256,7 @@ int Protocol::cmd_get_data_reply(int socket, unsigned char* cmdbuf, unsigned int
     unsigned char txbuf[100];
 
     // ----
-    if(ps_calc_ok()){// 计算ok
+    if(ptr_ps->ps_calc_ok()){// 计算ok
         data_len = out_put_size;// 图片真实长度
         DBG_INFO("get_calc_len : 0x%llx\n", data_len);
 
@@ -264,7 +286,7 @@ int Protocol::cmd_get_data_reply(int socket, unsigned char* cmdbuf, unsigned int
         recv_data = (unsigned char*)malloc(sizeof(unsigned char) * (data_len + 1));
 
         memset(recv_data, 0, data_len + 1);
-        memcpy(recv_data, memBaseAddr + out_put_address_offset, data_len);
+        memcpy(recv_data, ptr_reg->get_memBasseAddr() + out_put_address_offset, data_len);
         DBG_INFO("send data offset: %d, data_len : %d\n", out_put_address_offset, data_len);
         
         int temp = send(socket, recv_data, data_len, 0);
@@ -274,7 +296,7 @@ int Protocol::cmd_get_data_reply(int socket, unsigned char* cmdbuf, unsigned int
             free(recv_data);
             return simple_cmd_reply(socket, phead->get_seq(), Frame_head::CMD::CMD_GET_DATA, Frame_head::ERR_STATUS::ERR_NORM);
         }
-        DBG_INFO("send photo success, send_len = %d, memBaseAddr = %x\n", send_len, memBaseAddr);
+        DBG_INFO("send photo success, send_len = %d, memBaseAddr = %x\n", send_len, ptr_reg->get_memBasseAddr());
         free(recv_data);  
 
         //发送校验码+ 结束符 /0x0
@@ -297,7 +319,7 @@ int Protocol::cmd_get_data_reply(int socket, unsigned char* cmdbuf, unsigned int
 int Protocol::cmd_test_reg_reply(int socket, unsigned char* cmdbuf, unsigned int len) {
     F_Head* phead = (F_Head*)cmdbuf;
     // ps_copy_para
-    ps_copy_para(cmdbuf + FRAME_HEAD_LEN + 1, phead->get_len() - FRAME_HEAD_LEN - CMD_STATUS_LEN - CHECK_SUM_LEN - END_DATA_LEN);
+    ptr_ps->ps_copy_para(cmdbuf + FRAME_HEAD_LEN + 1, phead->get_len() - FRAME_HEAD_LEN - CMD_STATUS_LEN - CHECK_SUM_LEN - END_DATA_LEN);
 
     return simple_cmd_reply(socket, phead->get_seq(), Frame_head::CMD::CMD_TEST_ERG, Frame_head::ERR_STATUS::ERR_NONE);
 }
@@ -305,7 +327,7 @@ int Protocol::cmd_test_reg_reply(int socket, unsigned char* cmdbuf, unsigned int
 int Protocol::cmd_status_reply(int socket, unsigned char* cmdbuf, unsigned int len){
     F_Head* phead = (F_Head*)cmdbuf;
     // ---------
-    unsigned int status = ps_status();
+    unsigned int status = ptr_ps->ps_status();
 
     return simple_cmd_reply_data(socket, phead->get_seq(), Frame_head::CMD::CMD_PL_STATUS, Frame_head::ERR_STATUS::ERR_NONE, &status, STATUS_INFO_LEN);
 }
@@ -351,3 +373,5 @@ int Protocol::cmd_process(int socket, unsigned char* cmdbuf, unsigned int len) {
         return 0;
     }
 }
+
+};// end of namespace snowlake;

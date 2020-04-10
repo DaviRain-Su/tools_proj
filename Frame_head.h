@@ -3,6 +3,8 @@
 #include <iostream>
 #include "utils.h"
 
+namespace  snowlake { // namespace snowlake
+
 const size_t FRAME_HEAD_LEN = sizeof(pthread_key_t) ;//包长度目前16
 const size_t FRAME_MIN_LEN = FRAME_HEAD_LEN + 1 + 1; // 最小包长度
 const size_t FRAME_MAX_LEN = FRAME_HEAD_LEN + 20 * (1 << 20);//最大包长度
@@ -33,9 +35,9 @@ public:
         , m_ver(0)
         , m_seq(0)
         , m_flag(0)
-        { // 默认前导符
-            std::cout << "pkt_head_t()" << std::endl;
-        }
+    { // 默认前导符
+        std::cout << "pkt_head_t()" << std::endl;
+    }
 
     void set_pkt_head(uint32_t len, uint16_t seq, uint16_t flags){
         m_len = len;
@@ -47,7 +49,7 @@ public:
     uint32_t get_preamble() const { return m_preamble;}
 
     uint32_t get_len() const { return m_len; }
-    
+
     uint16_t get_seq() const { return m_seq; }
 
     uint16_t get_flag() const { return m_flag; }
@@ -60,6 +62,7 @@ public:
 };
 
 typedef pkt_head_t F_Head;
+
 
 class Frame_head
 {
@@ -92,10 +95,18 @@ public:
     Frame_head() {
         std::cout << "Frame_head()" << std::endl;
     }
+            
 
     ~Frame_head() {
+        free(m_f_head);
+        m_f_head = nullptr;
         std::cout << "~Frame_head()" << std::endl;
     }
+
+    void set_frame_head(F_Head* phead){
+        m_f_head = phead;
+    }
+
 private:
     //包头长度，目前16字节
     size_t get_frame_head_len() const { return FRAME_HEAD_LEN; }
@@ -103,7 +114,7 @@ private:
     size_t get_frame_min_len() const { return FRAME_MIN_LEN; }
     //最大包长度
     size_t get_frame_max_len() const { return FRAME_MAX_LEN; }
-    
+
     size_t get_body_info_len() const  { return BODY_INFO_LEN; }
     size_t get_err_status_len() const { return ERR_STATUS_LEN; }
     size_t get_cmd_status_len() const { return CMD_STATUS_LEN; }
@@ -113,29 +124,29 @@ private:
     uint32_t get_frame_head_preamble() const  { return FRAME_PREAMBLE; }
 public:
     bool freamehead_is_vaild(){
-        if( m_f_head.get_preamble() != get_frame_head_preamble()){
+        if( m_f_head->get_preamble() != get_frame_head_preamble()){
             return false;
         }
-        if(m_f_head.get_len() < get_frame_min_len() || m_f_head.get_len() > get_frame_max_len()){
+        if(m_f_head->get_len() < get_frame_min_len() || m_f_head->get_len() > get_frame_max_len()){
             return false;
         }
-        if( check_sum(&m_f_head, 0xffffffff, m_f_head.get_len()) != 0 ){
+        if( check_sum(&m_f_head, 0xffffffff, m_f_head->get_len()) != 0 ){
             return false;
         }
         return true;
     }
     // 包长度
-    unsigned int get_frame_total_len(){ return m_f_head.get_len(); }
+    unsigned int get_frame_total_len(){ return m_f_head->get_len(); }
     // 数据部分长度
-    
+
     unsigned int get_frame_data_len() {
-        return m_f_head.get_pkt_data_len();
+        return m_f_head->get_pkt_data_len();
     }
-    
+
     void frame_fill_head(uint32_t len, uint16_t seq, uint16_t flags){
-        m_f_head.set_pkt_head(len, seq, flags);
+        m_f_head->set_pkt_head(len, seq, flags);
     }
 private:
-    F_Head m_f_head;
+    F_Head *m_f_head;
 };
-
+}; // end of namespace snowlake
