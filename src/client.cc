@@ -1,82 +1,55 @@
-#pragma once
+#include "../inc/client.h"
 
-#include <iostream>
-#include <time.h>
-#include <list>
+namespace snowlake{// start of namespace snowlake
 
-#include <string.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <signal.h>
-
-#include "Frame_head.h"
-#include "utils.h"
-#include "Protocol.h"
-
-using std::list;
-
-namespace snowlake { // start snowlake  
-class client
+int Client_info::_index = 0;
+Client_info::Client_info()
+    :_fd(0)
+     , _rxlen(0)
+     , _rxtime(0)
+     ,_fsmstate(0)
 {
-    struct Client_info
-    {
-        int _fd;//socket file discription
-        unsigned char _rxbuf[FRAME_MAX_LEN]; // 接收缓冲区长度
-        int _rxlen;// 当前接收数据长度
-        time_t _rxtime; // 上次接收包时刻
-        int _fsmstate;//状态
-        static int _index; // index
+    memset(_rxbuf, 0, FRAME_MAX_LEN);
+    _index++;
+    std::cout << "Clinet_info()" << std::endl;
+    std::cout << "index is " << _index << std::endl;
+}
 
-        Client_info()
-            :_fd(0)
-            , _rxlen(0)
-            , _rxtime(0)
-            ,_fsmstate(0)
-        {
-            memset(_rxbuf, 0, FRAME_MAX_LEN);
-            std::cout << "Clinet_info()" << std::endl;
-            std::cout << "index is " << _index << std::endl;
-        }
-        
-        Client_info(int fd, unsigned char *rxbuf, int rxlen, time_t rxtime,int fsmstate)
-            : _fd(fd)
-            , _rxlen(rxlen)
-            , _rxtime(rxtime)
-            , _fsmstate(fsmstate)
-        {
-            memcpy(_rxbuf, rxbuf, strlen((char*)rxbuf));
-            _index++;
-            std::cout << "Clinet_info(int, unsigned char*, int, time_t, int)" << std::endl;
-            std::cout << "index is " << _index << std::endl;
-        }
-
-        ~Client_info () {
-            std::cout << "~Clinet_info()" << std::endl;
-        }
-    };
-    int _index = 0;
-public:
-    typedef int(*Fn)(Client_info &rhs,void *args);
-
-    client();
-    ~client();
-    
-    void clients_itor(Fn fn, void *args);
-    int client_add_to_set(Client_info &pinfo, void *args);
-    int client_read_process(Client_info &pinfo, void *args);
-    void client_info_free();
-    void signalHandler(int sign);
-private:
-    list<Client_info> m_clients;    
-    shared_ptr<Protocol> ptr_protocol; 
-};
-
+Client_info::Client_info(int fd, unsigned char *rxbuf, int rxlen, time_t rxtime,int fsmstate)
+    : _fd(fd)
+    , _rxlen(rxlen)
+    , _rxtime(rxtime)
+    , _fsmstate(fsmstate)
+{
+    if(rxbuf){
+        memcpy(_rxbuf, rxbuf, strlen((char*)rxbuf));
+    }else{
+        memset(_rxbuf, 0, sizeof(_rxbuf));
+    }
+    _index++;
+    std::cout << "Clinet_info(int, unsigned char*, int, time_t, int)" << std::endl;
+    std::cout << "index is " << _index << std::endl;
+}
+void Client_info::set_client_info_fd(int fd) {
+    _fd = fd;
+}
+void Client_info::set_client_info_len(int len) {
+    _rxlen = len;
+}
+void Client_info::set_client_info_time(time_t t){
+    _rxtime = t;
+}
+void Client_info::set_client_info_state(int state){
+    _fsmstate = state;
+}
+Client_info::~Client_info () {
+    std::cout << "~Clinet_info()" << std::endl;
+}
+// --------------------------------------------------------------------------------------
 client::client()
     : ptr_protocol(new Protocol())
 {
-    m_clients.push_back(Client_info());
+    //m_clients.push_back(Client_info());
 
     std::cout << "client ()" << std::endl;
 }
@@ -87,12 +60,21 @@ client::~client() {
     std::cout << "~client()" << std::endl;
 }
 
-void client::clients_itor(Fn fn, void *args){
+void client::clients_itor(Callback fn, void *args){
     for(auto iter = m_clients.begin(); iter != m_clients.end(); iter++){
         fn(*iter, args);
     }    
 }
-
+void client::clients_itor_add_to_set(void *args){
+    for(auto iter = m_clients.begin(); iter != m_clients.end(); iter++) {
+        client_add_to_set(*iter, args);
+    }
+}
+void client::clients_itor_read_process(void *args){
+    for(auto iter = m_clients.begin(); iter != m_clients.end(); iter++){
+        client_read_process(*iter, args);
+    }    
+}
 int client::client_add_to_set(Client_info &pinfo, void *args){
     FD_SET(pinfo._fd, (fd_set *)args);
     return 0;
@@ -106,13 +88,13 @@ int client::client_read_process(Client_info &pinfo, void *args){
     int recv_len;
     static int index = 0;
     time_t now;
-    
+
     int nread;
 
     time(&now);
 
     if(FD_ISSET(pinfo._fd, (fd_set*)args)){
-        
+
         F_Head* phead = (F_Head*)pinfo._rxbuf;
         int result_len = phead->get_len() - pinfo._rxlen;
         uint64_t result = pinfo._fsmstate == Frame_head::RX_STATE::RX_STATE_START ? FRAME_HEAD_LEN : result_len; 
@@ -143,7 +125,7 @@ int client::client_read_process(Client_info &pinfo, void *args){
             case Frame_head::RX_STATE::RX_STATE_HEAD_GOT:
                 if(phead->get_len() <= pinfo._rxlen){
                     pinfo._fsmstate = Frame_head::RX_STATE::RX_STATE_START;
-                    
+
                     if(FRAME_END_SYM != pinfo._rxbuf[phead->get_len() -1 ]){
                         DBG_INFO("Error data end got\r\n");
                         pinfo._rxlen = 0;
@@ -190,7 +172,4 @@ void client::signalHandler(int sign){
         break;
     }
 }
-
-
 };// end of namespace snowlake
-

@@ -3,7 +3,7 @@
 #include <sys/socket.h>
 
 
-#include "Acceptor.h"
+#include "../inc/Acceptor.h"
 
 namespace snowlake {//start of namespace snowlake 
     
@@ -54,8 +54,12 @@ void Acceptor::listen() {
 }
 
 int Acceptor::accept() {
-    int peerfd = ::accept(_listensock.fd(), NULL, NULL);
-    if(-1 == peerfd ){
+    return accept(nullptr, nullptr);
+}
+
+int Acceptor::accept(sockaddr * addr, socklen_t *addrlen){
+    int peerfd = ::accept(_listensock.fd(), addr, addrlen);
+    if(-1 == peerfd){
         perror("accept");
     }
     return peerfd;

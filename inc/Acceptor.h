@@ -5,6 +5,7 @@
 
 namespace snowlake {
 
+//struct sockaddr;
 
 class Acceptor
 {
@@ -13,11 +14,12 @@ public:
     Acceptor(const string &ip, unsigned short port);
     void ready();
     int accept();
+    int accept(sockaddr *addr, socklen_t * addrlen);
     int fd() const { 
         return _listensock.fd();
     }
 
-    ~Acceptor();
+    ~Acceptor(){}
 
 private:
     void set_reuse_addr(bool on);

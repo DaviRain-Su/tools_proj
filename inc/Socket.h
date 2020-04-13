@@ -1,8 +1,7 @@
 #pragma once
 
+namespace snowlake { // start of namespace snowlake
 
-
-namespace snowlake {
 class Socket
 {
 public:
