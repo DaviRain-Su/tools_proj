@@ -57,7 +57,7 @@ int Protocol::simple_cmd_reply(int socket, uint16_t seq, unsigned char cmd, int8
     return 0;
 }
 
-int simple_cmd_reply_data(int socket, uint16_t seq, unsigned char cmd, int8_t rtcode, void *databuf, unsigned int datalen){
+int Protocol::simple_cmd_reply_data(int socket, uint16_t seq, unsigned char cmd, int8_t rtcode, void *databuf, unsigned int datalen){
 
     unsigned char txbuf[FRAME_HEAD_LEN + BODY_INFO_LEN + MYCONFIG_MAX_LEN + END_DATA_LEN]; // 1 is for FRAME_END_SYM
     if(MYCONFIG_MAX_LEN < datalen){

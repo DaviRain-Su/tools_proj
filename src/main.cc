@@ -1,7 +1,9 @@
 #include <iostream>
 #include <memory>
 #include <functional>
+#include <string>
 
+using std::string;
 using std::bind;
 using std::shared_ptr;
 
@@ -16,7 +18,9 @@ using namespace snowlake;
 int main()
 {
 
-    Acceptor acceptor(1000);
+    const string ip = "127.0.0.1";
+    unsigned short port = 88;
+    Acceptor acceptor(ip, port);
     shared_ptr<client> ptr_client(new client());
     acceptor.ready();
 

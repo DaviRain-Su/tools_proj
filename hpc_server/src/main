@@ -1,0 +1,14 @@
+#include <iostream>
+#include "../inc/IcerServo.h"
+
+using namespace std;
+using namespace snowlake;
+
+int main()
+{
+    IcerServo server("192.168.3.199", 8888);
+    server.start();
+
+    return 0;
+}
+

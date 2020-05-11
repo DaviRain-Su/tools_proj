@@ -2,73 +2,10 @@
 namespace snowlake{ // namespace snowlake
 
 Reg::Reg() {
-   /*
-    int ret =  fpga_init();
-   if(ret == -1){
-       reg_print("uio ctr fail \n");
-   }else{
-       reg_print("uio ctr success \n");
-   }*/
-/*
-    if(MAP_SIZE <= 0){
-        fprintf(stderr, "Bad mapsize: %d\n", MAP_SIZE);
-    }
-
-    m_fd0 = open("/dev/uio2", O_RDWR);
-    if(m_fd0 < 0) {
-        perror("Failed to open uio2 devfile");
-    }
-
-    m_fd = open("/dev/uio1", O_RDWR);
-    if(m_fd < 0){
-        perror("Failed to open uio1 devfile");
-    }
-    m_map_addr = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, m_fd, 0);
-    if(m_map_addr == MAP_FAILED){
-        perror("Failed to mmap");
-    }
-    m_mapped = static_cast<unsigned int*>(m_map_addr);
-
-    m_mfd = open("/dev/mem", O_RDWR);
-    if(m_mfd < 0){
-        perror("Failed tp opem mem devfile");
-    }
-    m_map_addrCt = mmap(NULL, BUFFER_SIZE, PROT_READ | PROT_WRITE , MAP_SHARED, m_mfd, MEM_BLOCK_BASE);
-    if(m_map_addrCt == MAP_FAILED){
-        perror("Failed to mmap Higt memory");
-    }
-
-    m_memBaseAddr = (char*)m_map_addrCt;
-    reg_print("fpga_init done ...!\n");
-    reg_print("m_memBaseAddr = 0x%llx\n", m_memBaseAddr);
-*/
     std::cout << "Reg()" << std::endl;
 }
 
 Reg::~Reg(){
-    /*
-    int ret = fpga_exit();
-    if(ret == 0){
-        reg_print("exit success \n");
-    }
-    */
-    /*
-    reg_print("--------------------\n");
-    reg_print("fpga_ Exiting \n");
-    reg_print("---------------------\n");
-    
-    munmap(m_map_addr, MAP_SIZE);
-    munmap(m_map_addrCt, BUFFER_SIZE);
-    
-    m_memBaseAddr = nullptr;
-    m_map_addr = nullptr;
-    m_map_addrCt = nullptr;
-    m_mapped = nullptr;
-
-    close(m_fd);
-    close(m_fd0);
-    close(m_mfd);
-    */
     std::cout << "~Reg()" << std::endl;
 }
 
@@ -271,7 +208,6 @@ int Reg::cpy_mem_to_file(char* dst_file, int offset, size_t total_len){
 }
 
 int Reg::cpy_file_to_mem(char* src_file, int offset){
-    //assert(nname);
     if (!src_file) return -1; // nnam is NULL
 
     int ifd = open(src_file, O_RDWR);

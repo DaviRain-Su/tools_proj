@@ -115,7 +115,7 @@ int client::client_read_process(Client_info &pinfo, void *args){
                     Frame_head temp;
                     temp.set_frame_head(phead);
                     if(temp.freamehead_is_vaild()){
-                        pinfo._fsmstate = Frame_head::RX_STATE::RX_STATE_START;
+                        pinfo._fsmstate = Frame_head::RX_STATE::RX_STATE_HEAD_GOT;
                     }else{
                         DBG_INFO("Error data head got \r\n");
                         pinfo._rxlen = 0;
